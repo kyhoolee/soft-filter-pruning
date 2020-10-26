@@ -237,6 +237,11 @@ def import_sparse(model):
 
 
 def check_channel(tensor):
+    #print('DEBUG: tensor-size')
+    #print(tensor.size())
+    #print(len(tensor.size()))
+#     if len(tensor.size()) == 0:
+#         return 0, 0
     size_0 = tensor.size()[0]
     size_1 = tensor.size()[1] * tensor.size()[2] * tensor.size()[3]
     tensor_resize = tensor.view(size_0, -1)
@@ -273,18 +278,35 @@ def extract_para(big_model):
         print("state dict length is one of 102, 182, 267, 522")
     except AssertionError as e:
         print("False state dict")
+       
+    print('big_model: ', big_model)
+    #print('big_model.state_dict():', big_model.state_dict())
 
     # indices_list = []
     kept_index_per_layer = {}
     kept_filter_per_layer = {}
     pruned_index_per_layer = {}
+    
+    #print('item[0]: ', item[0])
+#     param_names = [(it[0], it[1].size()) for it in item]
+#     for v in param_names:
+#         print(v)
+        
+#     print('\n\n')
 
-    for x in range(0, len(item) - 2, 5):
-        indices_zero, indices_nonzero = check_channel(item[x][1])
-        # indices_list.append(indices_nonzero)
-        pruned_index_per_layer[item[x][0]] = indices_zero
-        kept_index_per_layer[item[x][0]] = indices_nonzero
-        kept_filter_per_layer[item[x][0]] = indices_nonzero.shape[0]
+    for x in range(0, len(item) - 2, 1):
+        #print(item[x][0])
+        if(len(item[x][1].size()) == 4):
+            print(item[x][0])
+            #print('++')
+            indices_zero, indices_nonzero = check_channel(item[x][1])
+            print('shape: ', item[x][1].size())
+            print('indices_zero {} ++ indices_nonzero {}'.format(len(indices_zero), len(indices_nonzero)))
+            # indices_list.append(indices_nonzero)
+            pruned_index_per_layer[item[x][0]] = indices_zero
+            kept_index_per_layer[item[x][0]] = indices_nonzero
+            kept_filter_per_layer[item[x][0]] = indices_nonzero.shape[0]
+        
 
     # add 'module.' if state_dict are store in parallel format
     # state_dict = ['module.' + x for x in state_dict]
@@ -305,6 +327,25 @@ def extract_para(big_model):
                              'layer4.0.conv1.weight', 'layer4.0.conv3.weight']
         constrct_flag = bottle_block_flag
         block_flag = "conv3"
+    elif len(item) == 626:
+        bottle_block_flag = ['layer1.1.conv1.weight',
+                            'layer1.2.conv3.weight',
+                            'layer2.1.conv1.weight',
+                            'layer2.2.conv3.weight',
+                            'layer3.1.conv3.weight',
+                            'layer3.5.conv1.weight',
+                            'layer3.6.conv3.weight',
+                            'layer3.10.conv1.weight',
+                            'layer3.11.conv3.weight',
+                            'layer3.15.conv1.weight',
+                            'layer3.16.conv3.weight',
+                            'layer3.20.conv1.weight',
+                            'layer3.21.conv3.weight',
+                            'layer4.1.conv3.weight']
+        constrct_flag = bottle_block_flag
+        block_flag = "conv3"
+        
+
 
     # number of nonzero channel in conv1, and four stages
     num_for_construct = []
@@ -313,7 +354,11 @@ def extract_para(big_model):
 
     index_for_construct = dict(
         (key, value) for (key, value) in kept_index_per_layer.items() if block_flag in key)
+    
+    print('block_flag:', block_flag)
+    
     bn_value = get_bn_value(big_model, block_flag, pruned_index_per_layer)
+    
     if len(item) == 102:
         small_model = models.resnet18_small(index=kept_index_per_layer, bn_value=bn_value,
                                             num_for_construct=num_for_construct)
@@ -323,7 +368,7 @@ def extract_para(big_model):
     if len(item) == 267:
         small_model = models.resnet50_small(index=kept_index_per_layer, bn_value=bn_value,
                                             num_for_construct=num_for_construct)
-    if len(item) == 522:
+    if len(item) == 522 or len(item) == 626:
         small_model = models.resnet101_small(index=kept_index_per_layer, bn_value=bn_value,
                                              num_for_construct=num_for_construct)
     return kept_index_per_layer, pruned_index_per_layer, block_flag, small_model
@@ -333,16 +378,22 @@ def get_bn_value(big_model, block_flag, pruned_index_per_layer):
     big_model.eval()
     bn_flag = "bn3" if block_flag == "conv3" else "bn2"
     key_bn = [x for x in big_model.state_dict().keys() if "bn3" in x]
-    layer_flag_list = [[x[0:6], x[7], x[9:12], x] for x in key_bn if "weight" in x]
+    layer_flag_list = [[x.split('.')[0], x.split('.')[1], x.split('.')[2] , x] for x in key_bn if "weight" in x]
     # layer_flag_list = [['layer1', "0", "bn3",'layer1.0.bn3.weight']]
     bn_value = {}
+    #print('key_bn:', key_bn)
+    #print('layer_flag_list:', layer_flag_list)
+    #print('pruned_index_per_layer:', pruned_index_per_layer)
 
     for layer_flag in layer_flag_list:
+        #print('layer_flag:', layer_flag)
         module_bn = big_model._modules.get(layer_flag[0])._modules.get(layer_flag[1])._modules.get(layer_flag[2])
+        #print('type module_bn:', type(module_bn))
         num_feature = module_bn.num_features
         act_bn = module_bn(Variable(torch.zeros(1, num_feature, 1, 1)))
 
         index_name = layer_flag[3].replace("bn", "conv")
+        #print('index_name:', index_name)
         index = Variable(torch.LongTensor(pruned_index_per_layer[index_name]))
         act_bn = torch.index_select(act_bn, 1, index)
 
@@ -355,11 +406,15 @@ def get_bn_value(big_model, block_flag, pruned_index_per_layer):
 
 def get_small_model(big_model):
     indice_dict, pruned_index_per_layer, block_flag, small_model = extract_para(big_model)
+    # print('indice_dict:', indice_dict.keys())
     big_state_dict = big_model.state_dict()
     small_state_dict = {}
     keys_list = list(big_state_dict.keys())
+    # print('key_list:', keys_list)
+    keys_list = [x for x in keys_list if not any(s in x for s in ['bn1', 'bn2', 'bn3'])]
     # print("keys_list", keys_list)
     for index, [key, value] in enumerate(big_state_dict.items()):
+        print('index {} ++ key {}'.format(index, key))
         # all the conv layer excluding downsample layer
         flag_conv_ex_down = not 'bn' in key and not 'downsample' in key and not 'fc' in key
         # downsample conv layer
@@ -369,7 +424,7 @@ def get_small_model(big_model):
             small_state_dict[key] = torch.index_select(value, 0, indice_dict[key])
             conv_index = keys_list.index(key)
             # 4 following bn layer, bn_weight, bn_bias, bn_runningmean, bn_runningvar
-            for offset in range(1, 5, 1):
+            for offset in range(1, 6, 1):
                 bn_key = keys_list[conv_index + offset]
                 small_state_dict[bn_key] = torch.index_select(big_state_dict[bn_key], 0, indice_dict[key])
             # value for 'input' dimension
@@ -381,8 +436,10 @@ def get_small_model(big_model):
                 elif not "conv1" in key:
                     conv_index = keys_list.index(key)
                     # get the last con layer
-                    key_for_input = keys_list[conv_index - 5]
-                    # print("key_for_input", key, key_for_input)
+                    key_for_input = keys_list[conv_index]
+                    print("key_for_input: {} ++ {}".format(key, key_for_input))
+                    print('small_state_dict[key]:', small_state_dict[key].size())
+                    print('indice_dict[key_for_input]:', indice_dict[key_for_input])
                     small_state_dict[key] = torch.index_select(small_state_dict[key], 1, indice_dict[key_for_input])
             # only the first downsample layer should change as conv1 reduced
             elif 'layer1.0.downsample.0.weight' in key:

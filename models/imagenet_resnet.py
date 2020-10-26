@@ -39,6 +39,7 @@ class BasicBlock(nn.Module):
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
+        
 
         out = self.conv2(out)
         out = self.bn2(out)
@@ -70,20 +71,25 @@ class Bottleneck(nn.Module):
 
     def forward(self, x):
         residual = x
+        #print('block-0:', x.size())
 
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
+        #print('block-1:', out.size())
 
         out = self.conv2(out)
         out = self.bn2(out)
         out = self.relu(out)
+        #print('block-2:', out.size())
 
         out = self.conv3(out)
         out = self.bn3(out)
+        #print('block-3:', out.size())
 
         if self.downsample is not None:
             residual = self.downsample(x)
+            #print('residual:', residual.size())
 
         out += residual
         out = self.relu(out)
@@ -138,11 +144,17 @@ class ResNet(nn.Module):
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
+        
+        #print('0: ',x.size())
 
         x = self.layer1(x)
+        #print('1: ',x.size())
         x = self.layer2(x)
+        #print('2: ',x.size())
         x = self.layer3(x)
+        #print('3: ',x.size())
         x = self.layer4(x)
+        #print('4: ',x.size())
 
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)

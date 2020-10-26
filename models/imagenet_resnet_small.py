@@ -183,14 +183,10 @@ class ResNet_small(nn.Module):
         self.bn_layer4 = {key: bn_value[key] for key in bn_value.keys() if 'layer4' in key}
         # print("bn_layer1", bn_layer1.keys(), bn_layer2.keys(), bn_layer3.keys(), bn_layer4.keys())
 
-        self.layer1 = self._make_layer(block, num_for_construct[1], num_for_construct[2], 64, self.index_layer1, self.bn_layer1,
-                                       layers[0])
-        self.layer2 = self._make_layer(block, num_for_construct[3], num_for_construct[4], 128, self.index_layer2, self.bn_layer2,
-                                       layers[1], stride=2)
-        self.layer3 = self._make_layer(block, num_for_construct[5], num_for_construct[6], 256, self.index_layer3, self.bn_layer3,
-                                       layers[2], stride=2)
-        self.layer4 = self._make_layer(block, num_for_construct[7], num_for_construct[8], 512, self.index_layer4, self.bn_layer4,
-                                       layers[3], stride=2)
+        self.layer1 = self._make_layer(block, num_for_construct[1], num_for_construct[2], 64, self.index_layer1, self.bn_layer1, layers[0])
+        self.layer2 = self._make_layer(block, num_for_construct[3], num_for_construct[4], 128, self.index_layer2, self.bn_layer2, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, num_for_construct[5], num_for_construct[6], 256, self.index_layer3, self.bn_layer3, layers[2], stride=2)
+        self.layer4 = self._make_layer(block, num_for_construct[7], num_for_construct[8], 512, self.index_layer4, self.bn_layer4, layers[3], stride=2)
         self.avgpool = nn.AvgPool2d(7, stride=1)
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
